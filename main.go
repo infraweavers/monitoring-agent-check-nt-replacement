@@ -12,6 +12,7 @@ import (
 	"monitoring-agent-client-check-nt-replacement/internal/httpclient"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -28,6 +29,13 @@ const okExitCode = 0
 const warningExitCode = 1
 const criticalExitCode = 2
 const unknownExitCode = 3
+
+var exitCodeToString = map[int]string{
+	okExitCode:       "OK",
+	warningExitCode:  "WARNING",
+	criticalExitCode: "CRITICAL",
+	unknownExitCode:  "UNKNOWN",
+}
 
 func die(stdout io.Writer, message string) int {
 	fmt.Fprint(stdout, message)
@@ -60,8 +68,8 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	password := flag.String("password", os.Getenv("MONITORING_AGENT_PASSWORD"), "password")
 	counterName := flag.String("counter", "", "counter path (i.e. \\PhysicalDisk(_Total)\\Avg. Disk Queue Length)")
 
-	warningThreshold := flag.Int("warning", -1, "warning threshold")
-	criticalThreshold := flag.Int("critical", -1, "critical threshold")
+	warningThreshold := flag.Float64("warning", -1, "warning threshold")
+	criticalThreshold := flag.Float64("critical", -1, "critical threshold")
 
 	counterlabel := flag.String("label", "", "output label")
 	counterUnit := flag.String("unit", "%", "unit of measurement")
@@ -144,7 +152,47 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	decoder.DisallowUnknownFields()
 	decoder.Decode(&decodedResponse)
 
-	fmt.Printf("%s = %s %s | '%s'=%s%s;%d;%d;", *counterlabel, decodedResponse.Results[0].Value, *counterUnit, *counterlabel, decodedResponse.Results[0].Value, *counterUnit, *warningThreshold, *criticalThreshold)
+	outputValue := decodedResponse.Results[0].Value
+	outputFloatValue, err := strconv.ParseFloat(outputValue, 64)
 
-	return okExitCode
+	outputCode := unknownExitCode
+
+	if err != nil {
+
+	} else {
+
+		if *criticalThreshold >= *warningThreshold {
+			/*
+				on the number line this looks like:
+				|-----------------------
+				0             w    c
+			*/
+			if outputFloatValue > *criticalThreshold {
+				outputCode = criticalExitCode
+			} else if outputFloatValue > *warningThreshold && outputFloatValue <= *criticalThreshold {
+				outputCode = warningExitCode
+			} else {
+				outputCode = okExitCode
+			}
+
+		} else if *criticalThreshold < *warningThreshold {
+			/*
+				on the number line this looks like:
+				|-----------------------
+				0    c    w
+			*/
+			if outputFloatValue < *criticalThreshold {
+				outputCode = criticalExitCode
+			} else if outputFloatValue < *warningThreshold && outputFloatValue >= *criticalThreshold {
+				outputCode = warningExitCode
+			} else {
+				outputCode = okExitCode
+			}
+
+		}
+
+		fmt.Printf("%s = %s %s | '%s'=%s%s;%f;%f;\n", *counterlabel, outputValue, *counterUnit, *counterlabel, outputValue, *counterUnit, *warningThreshold, *criticalThreshold)
+	}
+
+	return outputCode
 }
