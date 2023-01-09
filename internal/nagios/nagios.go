@@ -245,8 +245,10 @@ func ParseRangeString(input string) *Range {
 	rangeComponents := RegexThree.FindAllStringSubmatch(input, -1) // 10:
 	if rangeComponents != nil {
 		// set_range_start
-		r.Start, _ = strconv.ParseFloat(rangeComponents[0][1], 64)
-		r.Start_Infinity = false
+		if rangeComponents[0][1] != "" {
+			r.Start, _ = strconv.ParseFloat(rangeComponents[0][1], 64)
+			r.Start_Infinity = false
+		}
 
 		r.End_Infinity = true
 		input = strings.TrimPrefix(input, rangeComponents[0][0])
