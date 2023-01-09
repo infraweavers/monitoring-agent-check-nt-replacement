@@ -177,6 +177,7 @@ type Range struct {
 	AlertOn        string
 }
 
+// # Returns 1 if an alert should be raised, otherwise 0
 func (r Range) CheckRange(value string) bool {
 
 	valueAsAFloat, _ := strconv.ParseFloat(value, 64)
@@ -218,7 +219,7 @@ func ParseRangeString(input string) *Range {
 
 	regexOne := regexp.MustCompile(`[\d~]`)
 	regexTwo := regexp.MustCompile(`^\@?((?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?|~)?(:((?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?)?)?$`)
-	RegexThree := regexp.MustCompile(`^(?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?:`)
+	RegexThree := regexp.MustCompile(`^((?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?)?:`)
 	RegexFour := regexp.MustCompile(`^(?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?$`)
 
 	r.Start = 0
@@ -244,11 +245,11 @@ func ParseRangeString(input string) *Range {
 	rangeComponents := RegexThree.FindAllStringSubmatch(input, -1) // 10:
 	if rangeComponents != nil {
 		// set_range_start
-		r.Start, _ = strconv.ParseFloat(rangeComponents[0][0], 64)
+		r.Start, _ = strconv.ParseFloat(rangeComponents[0][1], 64)
 		r.Start_Infinity = false
 
 		r.End_Infinity = true
-		input = strings.TrimPrefix(input, rangeComponents[0][0]+":")
+		input = strings.TrimPrefix(input, rangeComponents[0][0])
 		valid++
 	}
 	endOfRangeComponents := RegexFour.FindAllStringSubmatch(input, -1)
