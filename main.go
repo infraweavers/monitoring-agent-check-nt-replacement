@@ -16,6 +16,26 @@ import (
 	"time"
 )
 
+type floatFlag struct {
+	set   bool
+	value float64
+}
+
+func (sf *floatFlag) Set(x string) error {
+	potentialValue, parseErr := strconv.ParseFloat(x, 64)
+	if parseErr != nil {
+		sf.set = false
+		return nil
+	}
+	sf.value = potentialValue
+	sf.set = true
+	return nil
+}
+
+func (sf *floatFlag) String() string {
+	return fmt.Sprintf("%f", sf.value)
+}
+
 type CounterResult struct {
 	Results []CounterResultItem
 }
@@ -60,7 +80,6 @@ func main() {
 }
 
 func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
-	_ = flag.String("template", "", "pnp4nagios template")
 
 	hostname := flag.String("host", "", "hostname or ip")
 	port := flag.Int("port", 9000, "port number")
@@ -68,8 +87,11 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	password := flag.String("password", os.Getenv("MONITORING_AGENT_PASSWORD"), "password")
 	counterName := flag.String("counter", "", "counter path (i.e. \\PhysicalDisk(_Total)\\Avg. Disk Queue Length)")
 
-	warningThreshold := flag.Float64("warning", -1, "warning threshold")
-	criticalThreshold := flag.Float64("critical", -1, "critical threshold")
+	var warningThreshold floatFlag
+	var criticalThreshold floatFlag
+
+	flag.Var(&warningThreshold, "warning", "warning threshold")
+	flag.Var(&criticalThreshold, "critical", "critical threshold")
 
 	counterlabel := flag.String("label", "", "output label")
 	counterUnit := flag.String("unit", "%", "unit of measurement")
@@ -158,41 +180,44 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	outputCode := unknownExitCode
 
 	if err != nil {
+		fmt.Println(err.Error())
+		return unknownExitCode
+	}
 
-	} else {
-
-		if *criticalThreshold >= *warningThreshold {
-			/*
-				on the number line this looks like:
-				|-----------------------
-				0             w    c
-			*/
-			if outputFloatValue > *criticalThreshold {
-				outputCode = criticalExitCode
-			} else if outputFloatValue > *warningThreshold && outputFloatValue <= *criticalThreshold {
-				outputCode = warningExitCode
-			} else {
-				outputCode = okExitCode
-			}
-
-		} else if *criticalThreshold < *warningThreshold {
-			/*
-				on the number line this looks like:
-				|-----------------------
-				0    c    w
-			*/
-			if outputFloatValue < *criticalThreshold {
-				outputCode = criticalExitCode
-			} else if outputFloatValue < *warningThreshold && outputFloatValue >= *criticalThreshold {
-				outputCode = warningExitCode
-			} else {
-				outputCode = okExitCode
-			}
-
+	if criticalThreshold.value >= warningThreshold.value {
+		/*
+			i.e. "big values are a problem" (Like RAM consumption)
+			|-----------------------
+			0             w    c
+		*/
+		if outputFloatValue > criticalThreshold.value {
+			outputCode = criticalExitCode
+		} else if outputFloatValue > warningThreshold.value && outputFloatValue <= criticalThreshold.value {
+			outputCode = warningExitCode
+		} else {
+			outputCode = okExitCode
 		}
 
-		fmt.Printf("%s = %s %s | '%s'=%s%s;%f;%f;\n", *counterlabel, outputValue, *counterUnit, *counterlabel, outputValue, *counterUnit, *warningThreshold, *criticalThreshold)
+	} else if criticalThreshold.value < warningThreshold.value {
+		/*
+			i.e. "small values are a problem" (Like disk space)
+			|-----------------------
+			0    c    w
+		*/
+		if outputFloatValue < criticalThreshold.value {
+			outputCode = criticalExitCode
+		} else if outputFloatValue < warningThreshold.value && outputFloatValue >= criticalThreshold.value {
+			outputCode = warningExitCode
+		} else {
+			outputCode = okExitCode
+		}
+
 	}
+
+	fmt.Printf("%s: %s = %s %s | ", exitCodeToString[outputCode], *counterlabel, outputValue, *counterUnit)
+	fmt.Printf("'%s'=%s%s;", *counterlabel, outputValue, *counterUnit)
+	fmt.Printf("%f;%f;", warningThreshold.value, criticalThreshold.value)
+	fmt.Printf("\n")
 
 	return outputCode
 }
