@@ -93,7 +93,7 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	flag.Var(&warningThreshold, "warning", "warning threshold")
 	flag.Var(&criticalThreshold, "critical", "critical threshold")
 
-	counterlabel := flag.String("label", "", "output label")
+	//counterlabel := flag.String("label", "", "output label")
 	counterUnit := flag.String("unit", "%", "unit of measurement")
 
 	cacertificateFilePath := flag.String("cacert", os.Getenv("MONITORING_AGENT_CA_CERTIFICATE_PATH"), "CA certificate")
@@ -174,49 +174,60 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	decoder.DisallowUnknownFields()
 	decoder.Decode(&decodedResponse)
 
-	outputValue := decodedResponse.Results[0].Value
-	outputFloatValue, err := strconv.ParseFloat(outputValue, 64)
-
 	outputCode := unknownExitCode
+	outputPerfData := ""
 
-	if err != nil {
-		fmt.Println(err.Error())
-		return unknownExitCode
-	}
+	for _, outputValue := range decodedResponse.Results {
 
-	if criticalThreshold.value >= warningThreshold.value {
-		/*
-			i.e. "big values are a problem" (Like RAM consumption)
-			|-----------------------
-			0             w    c
-		*/
-		if outputFloatValue > criticalThreshold.value {
-			outputCode = criticalExitCode
-		} else if outputFloatValue > warningThreshold.value && outputFloatValue <= criticalThreshold.value {
-			outputCode = warningExitCode
-		} else {
-			outputCode = okExitCode
+		outputFloatValue, err := strconv.ParseFloat(outputValue.Value, 64)
+
+		if err != nil {
+			fmt.Println(err.Error())
+			return unknownExitCode
 		}
 
-	} else if criticalThreshold.value < warningThreshold.value {
-		/*
-			i.e. "small values are a problem" (Like disk space)
-			|-----------------------
-			0    c    w
-		*/
-		if outputFloatValue < criticalThreshold.value {
-			outputCode = criticalExitCode
-		} else if outputFloatValue < warningThreshold.value && outputFloatValue >= criticalThreshold.value {
-			outputCode = warningExitCode
-		} else {
-			outputCode = okExitCode
+		if criticalThreshold.value >= warningThreshold.value {
+			/*
+				i.e. "big values are a problem" (Like RAM consumption)
+				|-----------------------
+				0             w    c
+			*/
+			if outputFloatValue > criticalThreshold.value {
+				outputCode = criticalExitCode
+			} else if outputFloatValue > warningThreshold.value && outputFloatValue <= criticalThreshold.value {
+				outputCode = warningExitCode
+			} else {
+				outputCode = okExitCode
+			}
+
+		} else if criticalThreshold.value < warningThreshold.value {
+			/*
+				i.e. "small values are a problem" (Like disk space)
+				|-----------------------
+				0    c    w
+			*/
+			if outputFloatValue < criticalThreshold.value {
+				outputCode = criticalExitCode
+			} else if outputFloatValue < warningThreshold.value && outputFloatValue >= criticalThreshold.value {
+				outputCode = warningExitCode
+			} else {
+				outputCode = okExitCode
+			}
 		}
 
+		outputPerfData += fmt.Sprintf("'%s'=%s%s;", outputValue.InstanceName, outputValue.Value, *counterUnit)
+
+		if warningThreshold.set {
+			outputPerfData += fmt.Sprintf("%f", warningThreshold.value)
+		}
+		outputPerfData += ";"
+		if criticalThreshold.set {
+			outputPerfData += fmt.Sprintf("%f", criticalThreshold.value)
+		}
+		outputPerfData += ";"
 	}
 
-	fmt.Printf("%s: %s = %s %s | ", exitCodeToString[outputCode], *counterlabel, outputValue, *counterUnit)
-	fmt.Printf("'%s'=%s%s;", *counterlabel, outputValue, *counterUnit)
-	fmt.Printf("%f;%f;", warningThreshold.value, criticalThreshold.value)
+	fmt.Printf("%s | %s", exitCodeToString[outputCode], outputPerfData)
 	fmt.Printf("\n")
 
 	return outputCode
