@@ -10,30 +10,25 @@ import (
 	"io"
 	"io/ioutil"
 	"monitoring-agent-client-check-nt-replacement/internal/httpclient"
+	"monitoring-agent-client-check-nt-replacement/internal/nagios"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 )
 
-type floatFlag struct {
+type stringFlag struct {
 	set   bool
-	value float64
+	value string
 }
 
-func (sf *floatFlag) Set(x string) error {
-	potentialValue, parseErr := strconv.ParseFloat(x, 64)
-	if parseErr != nil {
-		sf.set = false
-		return nil
-	}
-	sf.value = potentialValue
+func (sf *stringFlag) Set(x string) error {
+	sf.value = x
 	sf.set = true
 	return nil
 }
 
-func (sf *floatFlag) String() string {
-	return fmt.Sprintf("%f", sf.value)
+func (sf *stringFlag) String() string {
+	return sf.value
 }
 
 type CounterResult struct {
@@ -45,21 +40,9 @@ type CounterResultItem struct {
 	Value        string
 }
 
-const okExitCode = 0
-const warningExitCode = 1
-const criticalExitCode = 2
-const unknownExitCode = 3
-
-var exitCodeToString = map[int]string{
-	okExitCode:       "OK",
-	warningExitCode:  "WARNING",
-	criticalExitCode: "CRITICAL",
-	unknownExitCode:  "UNKNOWN",
-}
-
 func die(stdout io.Writer, message string) int {
 	fmt.Fprint(stdout, message)
-	return unknownExitCode
+	return nagios.StateUNKNOWNExitCode
 }
 
 func enableTimeout(timeout string) time.Duration {
@@ -81,17 +64,32 @@ func main() {
 
 func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 
+	var plugin = nagios.Plugin{
+		ExitStatusCode: nagios.StateOKExitCode,
+	}
+
+	defer plugin.ReturnCheckResults()
+
+	plugin.ServiceOutput = "CHECK-NT-REPLACEMENT"
+
 	hostname := flag.String("host", "", "hostname or ip")
 	port := flag.Int("port", 9000, "port number")
 	username := flag.String("username", os.Getenv("MONITORING_AGENT_USERNAME"), "username")
 	password := flag.String("password", os.Getenv("MONITORING_AGENT_PASSWORD"), "password")
 	counterName := flag.String("counter", "", "counter path (i.e. \\PhysicalDisk(_Total)\\Avg. Disk Queue Length)")
 
-	var warningThreshold floatFlag
-	var criticalThreshold floatFlag
+	var warningThreshold stringFlag
+	var criticalThreshold stringFlag
 
 	flag.Var(&warningThreshold, "warning", "warning threshold")
 	flag.Var(&criticalThreshold, "critical", "critical threshold")
+
+	if warningThreshold.set {
+		plugin.WarningThreshold = warningThreshold.value
+	}
+	if criticalThreshold.set {
+		plugin.CriticalThreshold = criticalThreshold.value
+	}
 
 	//counterlabel := flag.String("label", "", "output label")
 	counterUnit := flag.String("unit", "%", "unit of measurement")
@@ -174,61 +172,22 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	decoder.DisallowUnknownFields()
 	decoder.Decode(&decodedResponse)
 
-	outputCode := unknownExitCode
-	outputPerfData := ""
-
 	for _, outputValue := range decodedResponse.Results {
 
-		outputFloatValue, err := strconv.ParseFloat(outputValue.Value, 64)
-
-		if err != nil {
-			fmt.Println(err.Error())
-			return unknownExitCode
+		perfdata := nagios.PerformanceData{
+			Label:             outputValue.InstanceName,
+			Value:             outputValue.Value,
+			UnitOfMeasurement: *counterUnit,
 		}
-
-		if criticalThreshold.value >= warningThreshold.value {
-			/*
-				i.e. "big values are a problem" (Like RAM consumption)
-				|-----------------------
-				0             w    c
-			*/
-			if outputFloatValue > criticalThreshold.value {
-				outputCode = criticalExitCode
-			} else if outputFloatValue > warningThreshold.value && outputFloatValue <= criticalThreshold.value {
-				outputCode = warningExitCode
-			} else {
-				outputCode = okExitCode
-			}
-
-		} else if criticalThreshold.value < warningThreshold.value {
-			/*
-				i.e. "small values are a problem" (Like disk space)
-				|-----------------------
-				0    c    w
-			*/
-			if outputFloatValue < criticalThreshold.value {
-				outputCode = criticalExitCode
-			} else if outputFloatValue < warningThreshold.value && outputFloatValue >= criticalThreshold.value {
-				outputCode = warningExitCode
-			} else {
-				outputCode = okExitCode
-			}
-		}
-
-		outputPerfData += fmt.Sprintf("'%s'=%s%s;", outputValue.InstanceName, outputValue.Value, *counterUnit)
-
 		if warningThreshold.set {
-			outputPerfData += fmt.Sprintf("%f", warningThreshold.value)
+			perfdata.Warn = warningThreshold.value
 		}
-		outputPerfData += ";"
 		if criticalThreshold.set {
-			outputPerfData += fmt.Sprintf("%f", criticalThreshold.value)
+			perfdata.Crit = criticalThreshold.value
 		}
-		outputPerfData += ";"
+		plugin.AddPerfData(false, perfdata)
+		plugin.EvaluateThreshold(perfdata)
 	}
 
-	fmt.Printf("%s | %s", exitCodeToString[outputCode], outputPerfData)
-	fmt.Printf("\n")
-
-	return outputCode
+	return nagios.StateUNKNOWNExitCode
 }
