@@ -213,14 +213,15 @@ func (r Range) checkOutsideRange(valueAsAFloat float64) bool {
 	}
 }
 
+// https://www.monitoring-plugins.org/doc/guidelines.html#THRESHOLDFORMAT
 func ParseRangeString(input string) *Range {
 
 	r := Range{}
 
-	regexOne := regexp.MustCompile(`[\d~]`)
-	regexTwo := regexp.MustCompile(`^\@?((?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?|~)?(:((?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?)?)?$`)
-	RegexThree := regexp.MustCompile(`^((?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?)?:`)
-	RegexFour := regexp.MustCompile(`^(?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?$`)
+	digitOrInfinity := regexp.MustCompile(`[\d~]`)
+	optionalInvertAndRange := regexp.MustCompile(`^\@?((?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?|~)?(:((?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?)?)?$`)
+	firstHalfOfRange := regexp.MustCompile(`^((?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?)?:`)
+	endOfRange := regexp.MustCompile(`^(?:[-+]?[\d\.]+)(?:e(?:[-+]?[\d\.]+))?$`)
 
 	r.Start = 0
 	r.Start_Infinity = false
@@ -228,23 +229,26 @@ func ParseRangeString(input string) *Range {
 	r.End_Infinity = false
 	r.AlertOn = "OUTSIDE"
 
-	valid := 0
+	valid := true
 
-	if !(regexOne.MatchString(input) && regexTwo.MatchString(input)) { //not match regex
+	if !(digitOrInfinity.MatchString(input) && optionalInvertAndRange.MatchString(input)) { //not match regex
 		return nil
 	}
 
+	// invert the range, i.e. @10:20 means ≥ 10 and ≤ 20, (inside the range of {10 .. 20} inclusive)
 	if strings.HasPrefix(input, "@") {
 		r.AlertOn = "INSIDE"
 		input = input[1:]
 	}
+	// ~ represents infinity
 	if strings.HasPrefix(input, "~") {
 		r.Start_Infinity = true
 		input = input[1:]
 	}
-	rangeComponents := RegexThree.FindAllStringSubmatch(input, -1) // 10:
+
+	// 10:
+	rangeComponents := firstHalfOfRange.FindAllStringSubmatch(input, -1)
 	if rangeComponents != nil {
-		// set_range_start
 		if rangeComponents[0][1] != "" {
 			r.Start, _ = strconv.ParseFloat(rangeComponents[0][1], 64)
 			r.Start_Infinity = false
@@ -252,17 +256,19 @@ func ParseRangeString(input string) *Range {
 
 		r.End_Infinity = true
 		input = strings.TrimPrefix(input, rangeComponents[0][0])
-		valid++
-	}
-	endOfRangeComponents := RegexFour.FindAllStringSubmatch(input, -1)
-	if endOfRangeComponents != nil { // x:10 or 10
-		//set_range_end
-		r.End, _ = strconv.ParseFloat(endOfRangeComponents[0][0], 64)
-		r.End_Infinity = false
-		valid++
+		valid = true
 	}
 
-	if valid > 0 && (r.Start_Infinity || r.End_Infinity || r.Start <= r.End) {
+	// x:10 or 10
+	endOfRangeComponents := endOfRange.FindAllStringSubmatch(input, -1)
+	if endOfRangeComponents != nil {
+
+		r.End, _ = strconv.ParseFloat(endOfRangeComponents[0][0], 64)
+		r.End_Infinity = false
+		valid = true
+	}
+
+	if valid && (r.Start_Infinity || r.End_Infinity || r.Start <= r.End) {
 		return &r
 	} else {
 		return nil
