@@ -59,18 +59,16 @@ func enableTimeout(timeout string) time.Duration {
 
 func main() {
 	httpClient := httpclient.NewHTTPClient()
-	os.Exit(invokeClient(os.Stdout, httpClient))
+	invokeClient(os.Stdout, httpClient)
 }
 
-func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
+func invokeClient(stdout io.Writer, httpClient httpclient.Interface) {
 
 	var plugin = nagios.Plugin{
 		ExitStatusCode: nagios.StateOKExitCode,
 	}
 
 	defer plugin.ReturnCheckResults()
-
-	plugin.ServiceOutput = "CHECK-NT-REPLACEMENT"
 
 	hostname := flag.String("host", "", "hostname or ip")
 	port := flag.Int("port", 9000, "port number")
@@ -103,10 +101,12 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	flag.Parse()
 
 	if *hostname == "" {
-		return die(stdout, "hostname is not set")
+		die(stdout, "hostname is not set")
+		return
 	}
 	if *password == "" {
-		return die(stdout, "password is not set")
+		die(stdout, "password is not set")
+		return
 	}
 
 	timeout := enableTimeout(*timeoutString)
@@ -127,7 +127,8 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	if *certificateFilePath != "" && *privateKeyFilePath != "" {
 		certificateToLoad, err := tls.LoadX509KeyPair(*certificateFilePath, *privateKeyFilePath)
 		if err != nil {
-			return die(stdout, fmt.Sprintf("error loading certificate pair %s", err.Error()))
+			die(stdout, fmt.Sprintf("error loading certificate pair %s", err.Error()))
+			return
 		}
 		transport.TLSClientConfig.Certificates = []tls.Certificate{certificateToLoad}
 	}
@@ -135,7 +136,8 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	if *cacertificateFilePath != "" {
 		caCertificate, err := ioutil.ReadFile(*cacertificateFilePath)
 		if err != nil {
-			return die(stdout, fmt.Sprintf("error loading ca certificate %s", err.Error()))
+			die(stdout, fmt.Sprintf("error loading ca certificate %s", err.Error()))
+			return
 		}
 		CACertificatePool := x509.NewCertPool()
 		CACertificatePool.AppendCertsFromPEM(caCertificate)
@@ -156,14 +158,16 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 	response, err := httpClient.Do(req)
 
 	if err != nil {
-		return die(stdout, fmt.Sprintf("got httpClient error %s", err.Error()))
+		die(stdout, fmt.Sprintf("got httpClient error %s", err.Error()))
+		return
 	}
 
 	defer response.Body.Close()
 
 	if response.StatusCode != 200 {
 		errorBodyContent, _ := ioutil.ReadAll(response.Body)
-		return die(stdout, fmt.Sprintf("Response code: %d\n%s", response.StatusCode, errorBodyContent))
+		die(stdout, fmt.Sprintf("Response code: %d\n%s", response.StatusCode, errorBodyContent))
+		return
 	}
 
 	var decodedResponse CounterResult
@@ -189,5 +193,17 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) int {
 		plugin.EvaluateThreshold(perfdata)
 	}
 
-	return nagios.StateUNKNOWNExitCode
+	plugin.ServiceOutput = nagios.StateOKLabel
+
+	if plugin.ExitStatusCode == nagios.StateWARNINGExitCode {
+		plugin.ServiceOutput = nagios.StateWARNINGLabel
+	}
+
+	if plugin.ExitStatusCode == nagios.StateCRITICALExitCode {
+		plugin.ServiceOutput = nagios.StateCRITICALLabel
+	}
+
+	if plugin.ExitStatusCode == nagios.StateUNKNOWNExitCode {
+		plugin.ServiceOutput = nagios.StateUNKNOWNLabel
+	}
 }
