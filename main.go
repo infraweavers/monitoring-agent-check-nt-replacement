@@ -65,7 +65,7 @@ func main() {
 func invokeClient(stdout io.Writer, httpClient httpclient.Interface) {
 
 	var plugin = nagios.Plugin{
-		ExitStatusCode: nagios.StateOKExitCode,
+		ExitStatusCode: nagios.StateUNKNOWNExitCode,
 	}
 
 	defer plugin.ReturnCheckResults()
@@ -175,6 +175,8 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) {
 	decoder := json.NewDecoder(response.Body)
 	decoder.DisallowUnknownFields()
 	decoder.Decode(&decodedResponse)
+
+	plugin.ExitStatusCode = nagios.StateOKExitCode
 
 	for _, outputValue := range decodedResponse.Results {
 
