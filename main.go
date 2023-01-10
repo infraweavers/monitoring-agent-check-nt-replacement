@@ -89,7 +89,7 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) {
 		plugin.CriticalThreshold = criticalThreshold.value
 	}
 
-	//counterlabel := flag.String("label", "", "output label")
+	counterlabel := flag.String("label", "", "output label")
 	counterUnit := flag.String("unit", "%", "unit of measurement")
 
 	cacertificateFilePath := flag.String("cacert", os.Getenv("MONITORING_AGENT_CA_CERTIFICATE_PATH"), "CA certificate")
@@ -180,8 +180,14 @@ func invokeClient(stdout io.Writer, httpClient httpclient.Interface) {
 
 	for _, outputValue := range decodedResponse.Results {
 
+		thisCounterLabel := outputValue.InstanceName
+
+		if *counterlabel != "" {
+			thisCounterLabel = *counterlabel
+		}
+
 		perfdata := nagios.PerformanceData{
-			Label:             outputValue.InstanceName,
+			Label:             thisCounterLabel,
 			Value:             outputValue.Value,
 			UnitOfMeasurement: *counterUnit,
 		}
