@@ -169,6 +169,9 @@ type PerformanceData struct {
 	Max string
 }
 
+// Range represents the thresholds that the user can pass in for warning
+// and critical, this format is defined here:
+// https://www.monitoring-plugins.org/doc/guidelines.html#THRESHOLDFORMAT
 type Range struct {
 	Start          float64
 	Start_Infinity bool
@@ -177,7 +180,8 @@ type Range struct {
 	AlertOn        string
 }
 
-// # Returns 1 if an alert should be raised, otherwise 0
+// CheckRange returns Returns true if an alert should be raised,
+// otherwise false
 func (r Range) CheckRange(value string) bool {
 
 	valueAsAFloat, _ := strconv.ParseFloat(value, 64)
@@ -188,6 +192,9 @@ func (r Range) CheckRange(value string) bool {
 	return isOutsideRange
 }
 
+// checkOutsideRange returns in the inverse of CheckRange
+// it is used to handle the inverting logic of "inside" vs
+// "outside" ranges in a cleanish way
 func (r Range) checkOutsideRange(valueAsAFloat float64) bool {
 
 	if r.End_Infinity == false && r.Start_Infinity == false {
@@ -213,7 +220,10 @@ func (r Range) checkOutsideRange(valueAsAFloat float64) bool {
 	}
 }
 
+// ParseRangeString static method to construct a Range object
+// from the string representation based on the definition here:
 // https://www.monitoring-plugins.org/doc/guidelines.html#THRESHOLDFORMAT
+
 func ParseRangeString(input string) *Range {
 
 	r := Range{}
