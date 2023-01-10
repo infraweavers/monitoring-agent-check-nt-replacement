@@ -57,15 +57,9 @@ func TestThis(t *testing.T) {
 		assert.Equal(t, shouldAlert, true)
 	})
 
-	t.Run("Within a range involving +inf", func(t *testing.T) {
+	t.Run("If invalid range is provided (with positive infinity) parsing should return nil", func(t *testing.T) {
 		parsedThing := ParseRangeString("50:~")
-		assert.Equal(t, parsedThing.Start, 50.0)
-		assert.Equal(t, parsedThing.End_Infinity, true)
-
-		assert.Equal(t, parsedThing.CheckRange("54"), false)
-		assert.Equal(t, parsedThing.CheckRange("65535.7"), false)
-		assert.Equal(t, parsedThing.CheckRange("-54"), true)
-		assert.Equal(t, parsedThing.CheckRange("49"), true)
+		assert.Nil(t, parsedThing)
 	})
 
 	t.Run("Alert in 0-32", func(t *testing.T) {
