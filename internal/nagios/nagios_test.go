@@ -94,4 +94,99 @@ func TestThis(t *testing.T) {
 		assert.Equal(t, parsedThing.CheckRange("-32"), false)
 		assert.Equal(t, parsedThing.CheckRange("-1"), false)
 	})
+
+	t.Run("Plugin should return exit code OK when value is within accetptable range", func(t *testing.T) {
+		var plugin = Plugin{
+			ExitStatusCode: StateOKExitCode,
+		}
+		plugin.ServiceOutput = "CHECK-NT-REPLACEMENT"
+
+		perfdata := PerformanceData{
+			Label:             "perfdata label",
+			Value:             "18.0",
+			UnitOfMeasurement: "C",
+			Warn:              "5:30",
+			Crit:              "0:40",
+		}
+		plugin.AddPerfData(false, perfdata)
+		plugin.EvaluateThreshold(perfdata)
+
+		assert.Equal(t, StateOKExitCode, plugin.ExitStatusCode)
+	})
+
+	t.Run("Plugin should return exit code WARNING when value is within warning range", func(t *testing.T) {
+		var plugin = Plugin{
+			ExitStatusCode: StateOKExitCode,
+		}
+		plugin.ServiceOutput = "CHECK-NT-REPLACEMENT"
+
+		perfdata := PerformanceData{
+			Label:             "perfdata label",
+			Value:             "31.0",
+			UnitOfMeasurement: "C",
+			Warn:              "5:30",
+			Crit:              "0:40",
+		}
+		plugin.AddPerfData(false, perfdata)
+		plugin.EvaluateThreshold(perfdata)
+
+		assert.Equal(t, StateWARNINGExitCode, plugin.ExitStatusCode)
+	})
+
+	t.Run("Plugin should return exit code WARNING when value is within warning range", func(t *testing.T) {
+		var plugin = Plugin{
+			ExitStatusCode: StateOKExitCode,
+		}
+		plugin.ServiceOutput = "CHECK-NT-REPLACEMENT"
+
+		perfdata := PerformanceData{
+			Label:             "perfdata label",
+			Value:             "4.0",
+			UnitOfMeasurement: "C",
+			Warn:              "5:30",
+			Crit:              "0:40",
+		}
+		plugin.AddPerfData(false, perfdata)
+		plugin.EvaluateThreshold(perfdata)
+
+		assert.Equal(t, StateWARNINGExitCode, plugin.ExitStatusCode)
+	})
+
+	t.Run("Plugin should return exit code CRITICAL when value is within warning range", func(t *testing.T) {
+		var plugin = Plugin{
+			ExitStatusCode: StateOKExitCode,
+		}
+		plugin.ServiceOutput = "CHECK-NT-REPLACEMENT"
+
+		perfdata := PerformanceData{
+			Label:             "perfdata label",
+			Value:             "41.0",
+			UnitOfMeasurement: "C",
+			Warn:              "5:30",
+			Crit:              "0:40",
+		}
+		plugin.AddPerfData(false, perfdata)
+		plugin.EvaluateThreshold(perfdata)
+
+		assert.Equal(t, StateCRITICALExitCode, plugin.ExitStatusCode)
+	})
+
+	t.Run("Plugin should return exit code CRITICAL when value is within warning range", func(t *testing.T) {
+		var plugin = Plugin{
+			ExitStatusCode: StateOKExitCode,
+		}
+		plugin.ServiceOutput = "CHECK-NT-REPLACEMENT"
+
+		perfdata := PerformanceData{
+			Label:             "perfdata label",
+			Value:             "-1.0",
+			UnitOfMeasurement: "C",
+			Warn:              "5:30",
+			Crit:              "0:40",
+		}
+		plugin.AddPerfData(false, perfdata)
+		plugin.EvaluateThreshold(perfdata)
+
+		assert.Equal(t, StateCRITICALExitCode, plugin.ExitStatusCode)
+	})
 }
